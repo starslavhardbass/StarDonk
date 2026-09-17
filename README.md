@@ -2,17 +2,43 @@
 
 Free Windows VST3 hardbass / donk synthesizer made by StarSlav.
 
-[![Download StarDonk](https://img.shields.io/badge/Download-StarDonk-yellow?style=for-the-badge)](https://github.com/starslavhardbass/StarDonk/releases/download/v1.0.0/StarDonk-v1.0.0-Windows-x64-VST3.zip)
+[![Download StarDonk](https://img.shields.io/badge/Download-StarDonk-yellow?style=for-the-badge)](https://github.com/starslavhardbass/StarDonk/releases/download/v1.0.1/StarDonk-v1.0.1-Windows-x64-VST3.zip)
 
 **Windows 64-bit VST3**
 
-[View release page](https://github.com/starslavhardbass/StarDonk/releases/tag/v1.0.0)
+**Current version: v1.0.1**
+
+[View latest release](https://github.com/starslavhardbass/StarDonk/releases/latest)
 
 ![StarDonk](docs/stardonk-default.png)
 
 ## Demo
 
-[![Watch StarDonk Demo](docs/stardonk-video.png)](https://www.youtube.com/watch?v=qcPkwo0MUIg)
+[Watch StarDonk Demo on YouTube](https://www.youtube.com/watch?v=qcPkwo0MUIg)
+
+## What's new in v1.0.1
+
+- Added automatic donk root detection
+- Added live Detected Root display
+- Added Root Note control
+- Added Match Root option
+- Match Root instantly matches the current detected root
+- Turning Match Root off returns Root Note to C
+- Random Donk resets Root Note to C unless Match Root is enabled
+- Added octave control for moving donks up or down while staying in the same key
+- Added Freeze Octave option
+- Random Donk resets octave to 0 unless Freeze Octave is enabled
+- Added WAV export
+- WAV exports use the current preset name, or a random StarDonk name
+- Detected root is added to exported WAV filenames
+- WAV exports now automatically trim unnecessary silence
+- Reverb tails are preserved while they are still audible
+- Improved FL Studio computer-keyboard support
+- Added version display to the Help window
+- Added manual GitHub update checker
+- Improved Help window scrolling and layout
+- Improved compatibility with older .donk presets
+- Various fixes and UI improvements
 
 ## Features
 
