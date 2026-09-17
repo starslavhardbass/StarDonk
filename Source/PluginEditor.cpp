@@ -347,6 +347,8 @@ NewProjectAudioProcessorEditor (NewProjectAudioProcessor& p)
     : AudioProcessorEditor (&p),
       audioProcessor (p)
 {
+    // FL på Windows tappar typing keyboard när plugin ytan klickas ibland
+    // så editor tar fokus o spelar samma qwerty noter själv istället
     setWantsKeyboardFocus (true);
     setMouseClickGrabsKeyboardFocus (true);
     juce::Random random;
@@ -781,7 +783,7 @@ NewProjectAudioProcessorEditor (NewProjectAudioProcessor& p)
 
             slider.setWantsKeyboardFocus (false);
             slider.setMouseClickGrabsKeyboardFocus (false);
-
+        
             slider.setColour (
                 juce::Slider::trackColourId,
                 juce::Colour (0xff344348));
@@ -1126,6 +1128,189 @@ NewProjectAudioProcessorEditor (NewProjectAudioProcessor& p)
             savePreset();
         };
 
+    detectedRootTitleLabel.setText (
+        "DETECTED ROOT",
+        juce::dontSendNotification);
+    detectedRootTitleLabel.setJustificationType (juce::Justification::centredRight);
+    detectedRootTitleLabel.setFont (juce::Font (juce::FontOptions()
+                .withName ("Arial")
+                .withHeight (10.0f)
+                .withStyle ("Bold")));
+    detectedRootTitleLabel.setColour (
+        juce::Label::textColourId,
+        juce::Colour (0xffffd34e));
+    addAndMakeVisible (detectedRootTitleLabel);
+
+    detectedRootValueLabel.setText ("--", juce::dontSendNotification);
+    detectedRootValueLabel.setJustificationType (juce::Justification::centred);
+    detectedRootValueLabel.setFont (juce::Font (juce::FontOptions()
+                .withName ("Arial")
+                .withHeight (12.0f)
+                .withStyle ("Bold")));
+    detectedRootValueLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    detectedRootValueLabel.setColour (juce::Label::backgroundColourId, juce::Colour (0xff111019));
+    detectedRootValueLabel.setColour (juce::Label::outlineColourId, juce::Colour (0xff494458));
+    detectedRootValueLabel.setTooltip (
+        "Best estimate from the body of the current donk. FM can make some donks ambiguous.");
+    addAndMakeVisible (detectedRootValueLabel);
+
+    assignedRootTitleLabel.setText (
+        "ROOT NOTE",
+        juce::dontSendNotification);
+    assignedRootTitleLabel.setJustificationType (juce::Justification::centredRight);
+    assignedRootTitleLabel.setFont (juce::Font (juce::FontOptions()
+                .withName ("Arial")
+                .withHeight (10.0f)
+                .withStyle ("Bold")));
+    assignedRootTitleLabel.setColour (
+        juce::Label::textColourId,
+        juce::Colour (0xffffd34e));
+    addAndMakeVisible (assignedRootTitleLabel);
+
+    static const char* donkRootNames[] =
+    {
+        "C", "C#", "D", "D#", "E", "F",
+        "F#", "G", "G#", "A", "A#", "B"
+    };
+
+    for (int i = 0; i < 12; ++i)
+        assignedRootBox.addItem (donkRootNames[i], i + 1);
+
+    assignedRootBox.setTooltip (
+        "Tell StarDonk what root this donk should use. This retunes playback like a sampler root note, but never moves the knobs or changes preset data.");
+    assignedRootBox.setWantsKeyboardFocus (false);
+    assignedRootBox.setMouseClickGrabsKeyboardFocus (false);
+    assignedRootBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff111019));
+    assignedRootBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
+    assignedRootBox.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xff494458));
+    assignedRootBox.setColour (juce::ComboBox::arrowColourId, juce::Colour (0xffffd34e));
+    assignedRootBox.onChange = [this]()
+        {
+            const int selected = assignedRootBox.getSelectedId() - 1;
+
+            if (selected >= 0)
+            {
+                audioProcessor.setAssignedDonkRootPitchClass (selected);
+
+                // C4 e neutral. F root beter sig typ som sample root F i en sampler.
+                audioProcessor.setRootNote (60 + selected);
+            }
+
+            // combo popup kan sno fokus på Windows, ta tillbaka det efter den stängts
+            juce::MessageManager::callAsync ([this]()
+                {
+                    if (isShowing())
+                        grabKeyboardFocus();
+                });
+        };
+    addAndMakeVisible (assignedRootBox);
+
+    matchRootToggle.setButtonText ("MATCH ROOT");
+    matchRootToggle.setTooltip (
+        "ON = immediately match ROOT NOTE to DETECTED ROOT and keep following it live. OFF = ROOT NOTE goes back to C.");
+    matchRootToggle.setWantsKeyboardFocus (false);
+    matchRootToggle.setMouseClickGrabsKeyboardFocus (false);
+    matchRootToggle.setColour (
+        juce::ToggleButton::textColourId,
+        juce::Colours::white);
+    matchRootToggle.setColour (
+        juce::ToggleButton::tickColourId,
+        juce::Colour (0xffffc933));
+    matchRootToggle.onClick = [this]()
+        {
+            if (matchRootToggle.getToggleState())
+            {
+                // matcha direkt, inte vänta tills nästa random
+                audioProcessor.analyseCurrentDonkRoot (false);
+
+                const int detectedPitchClass =
+                    audioProcessor.getDetectedDonkRootPitchClass();
+
+                if (detectedPitchClass >= 0)
+                {
+                    audioProcessor.setAssignedDonkRootPitchClass (
+                        detectedPitchClass);
+                    audioProcessor.setRootNote (
+                        60 + detectedPitchClass);
+                }
+            }
+            else
+            {
+                // match av = tillbaka till C direkt
+                audioProcessor.setAssignedDonkRootPitchClass (0);
+                audioProcessor.setRootNote (60);
+            }
+
+            refreshRootControls (false);
+        };
+    addAndMakeVisible (matchRootToggle);
+
+    octaveTitleLabel.setText (
+        "OCTAVE",
+        juce::dontSendNotification);
+    octaveTitleLabel.setJustificationType (juce::Justification::centredRight);
+    octaveTitleLabel.setFont (juce::Font (juce::FontOptions()
+                .withName ("Arial")
+                .withHeight (10.0f)
+                .withStyle ("Bold")));
+    octaveTitleLabel.setColour (
+        juce::Label::textColourId,
+        juce::Colour (0xffffd34e));
+    octaveTitleLabel.setTooltip (
+        "Move the whole donk up or down by octaves. The chosen root note stays the same.");
+    addAndMakeVisible (octaveTitleLabel);
+
+    octaveBox.addItem ("-2", 1);
+    octaveBox.addItem ("-1", 2);
+    octaveBox.addItem ("0", 3);
+    octaveBox.addItem ("+1", 4);
+    octaveBox.addItem ("+2", 5);
+    octaveBox.setSelectedId (3, juce::dontSendNotification);
+    octaveBox.setTooltip (
+        "Pitch the donk by whole octaves without changing its root/key.");
+    octaveBox.setWantsKeyboardFocus (false);
+    octaveBox.setMouseClickGrabsKeyboardFocus (false);
+    octaveBox.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff111019));
+    octaveBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
+    octaveBox.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xff494458));
+    octaveBox.setColour (juce::ComboBox::arrowColourId, juce::Colour (0xffffd34e));
+    octaveBox.onChange = [this]()
+        {
+            const int oct = octaveBox.getSelectedId() - 3;
+            audioProcessor.setOctaveShift (oct);
+
+            // combo popup kan sno fokus på Windows, ta tillbaka det efter den stängts
+            juce::MessageManager::callAsync ([this]()
+                {
+                    if (isShowing())
+                        grabKeyboardFocus();
+                });
+        };
+    addAndMakeVisible (octaveBox);
+
+    freezeOctaveToggle.setButtonText ("FREEZE OCTAVE");
+    freezeOctaveToggle.setTooltip (
+        "Keep the selected octave when RANDOM DONK is pressed. When off, RANDOM DONK resets OCTAVE to 0.");
+    freezeOctaveToggle.setWantsKeyboardFocus (false);
+    freezeOctaveToggle.setMouseClickGrabsKeyboardFocus (false);
+    freezeOctaveToggle.setColour (
+        juce::ToggleButton::textColourId,
+        juce::Colours::white);
+    freezeOctaveToggle.setColour (
+        juce::ToggleButton::tickColourId,
+        juce::Colour (0xffffc933));
+    addAndMakeVisible (freezeOctaveToggle);
+
+    setupButton (exportWavButton, "EXPORT WAV");
+    exportWavButton.setTooltip (
+        "Render the current donk as a 24-bit WAV. Root metadata is written when possible.");
+    exportWavButton.onClick = [this]()
+        {
+            exportDonkAsWav();
+        };
+
+    refreshRootControls (true);
+
     animationsOffToggle.setButtonText ("TURN OFF ANIMATIONS");
 
     animationsOffToggle.setToggleState (
@@ -1215,9 +1400,9 @@ NewProjectAudioProcessorEditor (NewProjectAudioProcessor& p)
         audioProcessor.setAdvancedModeEnabled (advancedModeToggle.getToggleState());
 
         if (advancedModeToggle.getToggleState())
-            setSize (920, 780);
+            setSize (920, 840);
         else
-            setSize (720, 610);
+            setSize (720, 670);
 
         updateAdvancedMode();
         applyMinimalisticMode();
@@ -1339,9 +1524,13 @@ NewProjectAudioProcessorEditor (NewProjectAudioProcessor& p)
     refreshPresetBox();
 
     if (audioProcessor.getAdvancedModeEnabled())
-        setSize (920, 780);
+        setSize (920, 840);
     else
-        setSize (720, 610);
+        setSize (720, 670);
+
+    // få musklick från rattar o knappar utan o registrera editorn som listener på sig själv
+    for (int i = 0; i < getNumChildComponents(); ++i)
+        getChildComponent (i)->addMouseListener (this, true);
 
     startTimerHz (60);
 }
@@ -1349,6 +1538,8 @@ NewProjectAudioProcessorEditor (NewProjectAudioProcessor& p)
 NewProjectAudioProcessorEditor::
 ~NewProjectAudioProcessorEditor()
 {
+    releaseComputerKeyboardNote();
+    audioProcessor.computerKeyboardAllNotesOff();
     stopTimer();
 }
 
@@ -1472,14 +1663,14 @@ void NewProjectAudioProcessorEditor::setupAdvancedControls()
         slider.setTooltip (audioProcessor.getAdvancedParameterName (i));
         slider.setWantsKeyboardFocus (false);
         slider.setMouseClickGrabsKeyboardFocus (false);
-
+    
         slider.onValueChange = [this, i]()
             {
                 audioProcessor.setAdvancedParameterValue (
                     i,
                     static_cast<float> (advancedSliders[static_cast<size_t> (i)].getValue()));
 
-            };
+                };
 
         label.setText (
             audioProcessor.getAdvancedParameterName (i).toUpperCase(),
@@ -1692,7 +1883,11 @@ void NewProjectAudioProcessorEditor::applyMinimalisticMode()
         &donkLoopSpeedLabel,
         &sidechainAmountLabel,
         &sidechainPositionLabel,
-        &volumeLabel
+        &volumeLabel,
+        &detectedRootTitleLabel,
+        &detectedRootValueLabel,
+        &assignedRootTitleLabel,
+        &octaveTitleLabel
     };
 
     for (auto* label : labels)
@@ -1710,7 +1905,8 @@ void NewProjectAudioProcessorEditor::applyMinimalisticMode()
         &nextPresetButton,
         &savePresetButton,
         &helpButton,
-        &giveBackDonkButton
+        &giveBackDonkButton,
+        &exportWavButton
     };
 
     for (auto* button : buttons)
@@ -1743,6 +1939,8 @@ void NewProjectAudioProcessorEditor::applyMinimalisticMode()
         &declickerToggle,
         &experimentalControlToggle,
         &experimentalRandomToggle,
+        &matchRootToggle,
+        &freezeOctaveToggle,
         &minimalisticToggle,
         &advancedModeToggle
     };
@@ -1801,7 +1999,209 @@ void NewProjectAudioProcessorEditor::applyMinimalisticMode()
                 : juce::Colour (0xffffd34e));
     }
 
+    detectedRootValueLabel.setColour (
+        juce::Label::backgroundColourId,
+        minimal ? juce::Colours::black : juce::Colour (0xff111019));
+    detectedRootValueLabel.setColour (
+        juce::Label::outlineColourId,
+        minimal ? juce::Colour (0xff777777) : juce::Colour (0xff494458));
+
+    assignedRootBox.setColour (
+        juce::ComboBox::backgroundColourId,
+        minimal ? juce::Colours::black : juce::Colour (0xff111019));
+    assignedRootBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
+    assignedRootBox.setColour (
+        juce::ComboBox::outlineColourId,
+        minimal ? juce::Colour (0xff777777) : juce::Colour (0xff494458));
+    assignedRootBox.setColour (
+        juce::ComboBox::arrowColourId,
+        minimal ? juce::Colours::white : juce::Colour (0xffffd34e));
+
+    octaveBox.setColour (
+        juce::ComboBox::backgroundColourId,
+        minimal ? juce::Colours::black : juce::Colour (0xff111019));
+    octaveBox.setColour (juce::ComboBox::textColourId, juce::Colours::white);
+    octaveBox.setColour (
+        juce::ComboBox::outlineColourId,
+        minimal ? juce::Colour (0xff777777) : juce::Colour (0xff494458));
+    octaveBox.setColour (
+        juce::ComboBox::arrowColourId,
+        minimal ? juce::Colours::white : juce::Colour (0xffffd34e));
+
     repaint();
+}
+
+void NewProjectAudioProcessorEditor::refreshRootControls (bool analyseIfMissing)
+{
+    if (analyseIfMissing
+        && audioProcessor.getDetectedDonkRootMidiNote() < 0)
+    {
+        audioProcessor.analyseCurrentDonkRoot (false);
+    }
+
+    detectedRootValueLabel.setText (
+        audioProcessor.getDetectedDonkRootName(),
+        juce::dontSendNotification);
+
+    const int activeRootPitchClass = (
+        (audioProcessor.getRootNote() % 12) + 12) % 12;
+
+    assignedRootBox.setSelectedId (
+        activeRootPitchClass + 1,
+        juce::dontSendNotification);
+
+    octaveBox.setSelectedId (
+        audioProcessor.getOctaveShift() + 3,
+        juce::dontSendNotification);
+}
+
+std::size_t NewProjectAudioProcessorEditor::getRootAnalysisSignature() const
+{
+    std::size_t seed = 0;
+
+    const auto mix = [&seed] (auto value)
+        {
+            using ValueType = decltype (value);
+            const std::size_t valueHash = std::hash<ValueType> {} (value);
+            seed ^= valueHash
+                + static_cast<std::size_t> (0x9e3779b9u)
+                + (seed << 6)
+                + (seed >> 2);
+        };
+
+    mix (audioProcessor.getPitchDrop());
+    mix (audioProcessor.getDecay());
+    mix (audioProcessor.getKnock());
+    mix (audioProcessor.getRatio());
+    mix (audioProcessor.getShape());
+    mix (audioProcessor.getTone());
+    mix (audioProcessor.getBody());
+    mix (audioProcessor.getDrive());
+    mix (audioProcessor.getBasslineEnabled());
+    mix (audioProcessor.getAdvancedModeEnabled());
+
+    for (int i = 0; i < NewProjectAudioProcessor::AdvancedParameterCount; ++i)
+        mix (audioProcessor.getAdvancedParameterValue (i));
+
+    return seed;
+}
+
+void NewProjectAudioProcessorEditor::updateLiveRootDetection()
+{
+    const auto signature = getRootAnalysisSignature();
+
+    if (! rootAnalysisSignatureReady)
+    {
+        rootAnalysisSignatureReady = true;
+        lastRootAnalysisSignature = signature;
+        return;
+    }
+
+    if (signature != lastRootAnalysisSignature)
+    {
+        lastRootAnalysisSignature = signature;
+        rootAnalysisPending = true;
+    }
+
+    if (! rootAnalysisPending)
+        return;
+
+    const double nowMs = juce::Time::getMillisecondCounterHiRes();
+
+    // ungefär 5 gånger per sekund max så ui inte blir seg när man drar rattar
+    if (nowMs - lastRootAnalysisTimeMs < 180.0)
+        return;
+
+    audioProcessor.analyseCurrentDonkRoot (false);
+
+    // MATCH ROOT följer detected root live när rattarna ändrar soundet
+    if (matchRootToggle.getToggleState())
+    {
+        const int detectedPitchClass =
+            audioProcessor.getDetectedDonkRootPitchClass();
+
+        if (detectedPitchClass >= 0
+            && audioProcessor.getAssignedDonkRootPitchClass()
+                != detectedPitchClass)
+        {
+            audioProcessor.setAssignedDonkRootPitchClass (
+                detectedPitchClass);
+            audioProcessor.setRootNote (
+                60 + detectedPitchClass);
+        }
+    }
+
+    refreshRootControls (false);
+    rootAnalysisPending = false;
+    lastRootAnalysisTimeMs = nowMs;
+}
+
+void NewProjectAudioProcessorEditor::exportDonkAsWav()
+{
+    // uppdatera detected root från ljudet, men behåll användarens root override
+    audioProcessor.analyseCurrentDonkRoot (false);
+    refreshRootControls (false);
+
+    auto exportDirectory = juce::File::getSpecialLocation (
+            juce::File::userDocumentsDirectory)
+            .getChildFile ("StarDonk")
+            .getChildFile ("Exports");
+
+    if (! exportDirectory.exists())
+        exportDirectory.createDirectory();
+
+    juce::String baseName;
+    const int currentPreset = audioProcessor.getCurrentPresetIndex();
+
+    if (currentPreset >= 0)
+    {
+        const auto presetName = audioProcessor.getPresetName (currentPreset).trim();
+
+        if (presetName.isNotEmpty())
+            baseName = presetName;
+    }
+
+    // ingen vald preset = ge wav filen ett random StarDonk namn
+    if (baseName.isEmpty())
+        baseName = makeRandomPresetName();
+
+    const auto rootName = audioProcessor.getDetectedDonkRootName();
+
+    if (rootName != "--")
+        baseName << "_" << rootName.replace ("#", "sharp");
+
+    const juce::String invalidCharacters = "\\/:*?\"<>|";
+
+    for (auto character : invalidCharacters)
+        baseName = baseName.replaceCharacter (character, '_');
+
+    auto suggestedFile = exportDirectory
+            .getChildFile (baseName)
+            .withFileExtension (".wav");
+
+    wavFileChooser = std::make_unique<juce::FileChooser> (
+        "Export current StarDonk as WAV",
+        suggestedFile,
+        "*.wav");
+
+    const int chooserFlags = juce::FileBrowserComponent::saveMode
+        | juce::FileBrowserComponent::canSelectFiles
+        | juce::FileBrowserComponent::warnAboutOverwriting;
+
+    wavFileChooser->launchAsync (chooserFlags, [this] (const juce::FileChooser& chooser)
+        {
+            auto chosenFile = chooser.getResult();
+
+            if (chosenFile != juce::File())
+            {
+                if (! chosenFile.hasFileExtension ("wav"))
+                    chosenFile = chosenFile.withFileExtension (".wav");
+
+                audioProcessor.exportCurrentDonkToWav (chosenFile);
+            }
+
+            wavFileChooser.reset();
+        });
 }
 
 void NewProjectAudioProcessorEditor::updateLoopButton()
@@ -1885,6 +2285,40 @@ void NewProjectAudioProcessorEditor::randomize()
     previousRandomSnapshot = captureDonkSnapshot();
     hasPreviousRandom = true;
     audioProcessor.randomizeSound();
+
+    // RANDOM DONK resetar oktaven till 0 om freeze inte e på
+    if (! freezeOctaveToggle.getToggleState())
+        audioProcessor.setOctaveShift (0);
+
+    // random börjar från C som standard, bara RANDOM DONK gör den här reseten
+    audioProcessor.setAssignedDonkRootPitchClass (0);
+    audioProcessor.setRootNote (60);
+
+    // random motorn e exakt samma, vi analyserar bara efteråt o rör inte rattarna
+    audioProcessor.analyseCurrentDonkRoot (false);
+
+    // om MATCH ROOT e på så följer root note den detekterade rooten direkt
+    if (matchRootToggle.getToggleState())
+    {
+        const int detectedPitchClass =
+            audioProcessor.getDetectedDonkRootPitchClass();
+
+        if (detectedPitchClass >= 0
+            && audioProcessor.getAssignedDonkRootPitchClass()
+                != detectedPitchClass)
+        {
+            audioProcessor.setAssignedDonkRootPitchClass (
+                detectedPitchClass);
+            audioProcessor.setRootNote (
+                60 + detectedPitchClass);
+        }
+    }
+
+    refreshRootControls (false);
+    rootAnalysisSignatureReady = true;
+    lastRootAnalysisSignature = getRootAnalysisSignature();
+    rootAnalysisPending = false;
+    lastRootAnalysisTimeMs = juce::Time::getMillisecondCounterHiRes();
 
     if (discoModeToggle.getToggleState())
     {
@@ -2050,6 +2484,7 @@ showPresetGrid()
     if (presetGrid == nullptr)
     {
         presetGrid = std::make_unique<PresetGridComponent>();
+        presetGrid->addMouseListener (this, true);
 
         presetGrid->onPresetSelected = [this](int displayIndex)
         {
@@ -2063,6 +2498,7 @@ showPresetGrid()
             {
                 audioProcessor.loadPreset (targetPreset);
                 updateSlidersFromProcessor();
+                refreshRootControls (true);
                 refreshPresetBox();
                             triggerFlyingPresetName();
                 hidePresetGrid();
@@ -2273,6 +2709,7 @@ void NewProjectAudioProcessorEditor::showHelpPanel()
     if (helpPanel == nullptr)
     {
         helpPanel = std::make_unique<StarDonkHelpComponent>();
+        helpPanel->addMouseListener (this, true);
 
         helpPanel->onClose = [this]()
             {
@@ -2282,6 +2719,8 @@ void NewProjectAudioProcessorEditor::showHelpPanel()
         addAndMakeVisible (*helpPanel);
     }
 
+    helpPanel->setMinimalistic (
+        audioProcessor.getMinimalisticEnabled());
     helpPanel->setBounds (getLocalBounds());
     helpPanel->setVisible (true);
     helpPanel->toFront (true);
@@ -2315,6 +2754,7 @@ previousPreset()
 
     audioProcessor.loadPreset (index);
     updateSlidersFromProcessor();
+    refreshRootControls (true);
     refreshPresetBox();
     triggerFlyingPresetName();
 }
@@ -2340,6 +2780,7 @@ nextPreset()
 
     audioProcessor.loadPreset (index);
     updateSlidersFromProcessor();
+    refreshRootControls (true);
     refreshPresetBox();
     triggerFlyingPresetName();
 }
@@ -2347,6 +2788,9 @@ nextPreset()
 void NewProjectAudioProcessorEditor::
 savePreset()
 {
+    // spara färsk detected root också, utan o ändra användarens valda root
+    audioProcessor.analyseCurrentDonkRoot (false);
+    refreshRootControls (false);
     savePresetWithSuggestedName ("My Donk");
 }
 
@@ -2493,6 +2937,8 @@ void NewProjectAudioProcessorEditor::giveBackDonk()
 
     restoreDonkSnapshot (previousRandomSnapshot);
     hasPreviousRandom = false;
+    audioProcessor.analyseCurrentDonkRoot (false);
+    refreshRootControls (false);
     refreshPresetBox();
     repaint();
 }
@@ -2776,7 +3222,8 @@ void NewProjectAudioProcessorEditor::applyChildShakeTransform()
 
 void NewProjectAudioProcessorEditor::timerCallback()
 {
-    updateComputerKeyboardState();
+
+    updateLiveRootDetection();
 
     if (! pitchDropSlider.isMouseButtonDown())
         pitchDropSlider.setValue (audioProcessor.getPitchDrop(), juce::dontSendNotification);
@@ -2866,6 +3313,13 @@ void NewProjectAudioProcessorEditor::timerCallback()
     minimalisticToggle.setToggleState (
         audioProcessor.getMinimalisticEnabled(),
         juce::dontSendNotification);
+
+    if (helpPanel != nullptr
+        && helpPanel->isVisible())
+    {
+        helpPanel->setMinimalistic (
+            audioProcessor.getMinimalisticEnabled());
+    }
 
     advancedModeToggle.setToggleState (
         audioProcessor.getAdvancedModeEnabled(),
@@ -3001,6 +3455,8 @@ void NewProjectAudioProcessorEditor::timerCallback()
             audioProcessor.setExperimentalControlEnabled (true);
             audioProcessor.setExperimentalRandomEnabled (true);
             audioProcessor.randomizeSound();
+            audioProcessor.analyseCurrentDonkRoot (false);
+            refreshRootControls (false);
             updateSlidersFromProcessor();
             triggerRandomExplosion();
             discoLife = 1.0f;
@@ -3167,9 +3623,7 @@ void NewProjectAudioProcessorEditor::paint (juce::Graphics& g)
             20.0f,
             260.0f,
             static_cast<float> (getWidth() - 40),
-            audioProcessor.getAdvancedModeEnabled()
-                ? static_cast<float> (getHeight() - 305)
-                : 330.0f,
+            static_cast<float> (getHeight() - 285),
             12.0f,
             1.0f);
 
@@ -3542,9 +3996,7 @@ void NewProjectAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (
         juce::Colour (0xff100d17));
 
-    const float mainPanelHeight = audioProcessor.getAdvancedModeEnabled()
-            ? static_cast<float> (getHeight() - 305)
-            : 330.0f;
+    const float mainPanelHeight = static_cast<float> (getHeight() - 285);
 
     g.fillRoundedRectangle (
         20.0f,
@@ -4144,7 +4596,8 @@ void NewProjectAudioProcessorEditor::resized()
         24,
         22);
 
-    const int bottomY = getHeight() - 50;
+    const int bottomY = getHeight() - 110;
+    const int utilityY = getHeight() - 52;
 
     giveBackDonkButton.setBounds (
         35,
@@ -4193,6 +4646,21 @@ void NewProjectAudioProcessorEditor::resized()
         bottomY,
         audioProcessor.getAdvancedModeEnabled() ? 195 : 112,
         25);
+
+    const int rootRowWidth = 610;
+    const int rootRowX = (getWidth() - rootRowWidth) / 2;
+
+    detectedRootTitleLabel.setBounds (rootRowX, utilityY, 100, 25);
+    detectedRootValueLabel.setBounds (rootRowX + 105, utilityY + 1, 55, 23);
+    matchRootToggle.setBounds (rootRowX + 175, utilityY - 21, 140, 19);
+    assignedRootTitleLabel.setBounds (rootRowX + 175, utilityY, 70, 25);
+    assignedRootBox.setBounds (rootRowX + 250, utilityY + 1, 65, 23);
+
+    freezeOctaveToggle.setBounds (rootRowX + 330, utilityY - 21, 145, 19);
+    octaveTitleLabel.setBounds (rootRowX + 330, utilityY, 60, 25);
+    octaveBox.setBounds (rootRowX + 395, utilityY + 1, 65, 23);
+
+    exportWavButton.setBounds (rootRowX + 480, utilityY, 130, 25);
 
     // flytta popupen igen om den syns
 
@@ -4435,11 +4903,70 @@ void NewProjectAudioProcessorEditor::chooseCustomFace()
         });
 }
 
+int NewProjectAudioProcessorEditor::midiNoteForComputerKey (
+    const juce::KeyPress& key) const
+{
+    const auto character = juce::CharacterFunctions::toLowerCase (
+        key.getTextCharacter());
+
+    // typ samma piano layout som FL så zxc/qwerty fortsätter funka när plugin har fokus
+    switch (character)
+    {
+        case 'z': return 60;
+        case 's': return 61;
+        case 'x': return 62;
+        case 'd': return 63;
+        case 'c': return 64;
+        case 'v': return 65;
+        case 'g': return 66;
+        case 'b': return 67;
+        case 'h': return 68;
+        case 'n': return 69;
+        case 'j': return 70;
+        case 'm': return 71;
+
+        case 'q': return 72;
+        case '2': return 73;
+        case 'w': return 74;
+        case '3': return 75;
+        case 'e': return 76;
+        case 'r': return 77;
+        case '5': return 78;
+        case 't': return 79;
+        case '6': return 80;
+        case 'y': return 81;
+        case '7': return 82;
+        case 'u': return 83;
+
+        default: break;
+    }
+
+    return -1;
+}
+
+void NewProjectAudioProcessorEditor::releaseComputerKeyboardNote()
+{
+    if (computerKeyboardHeldMidiNote >= 0)
+    {
+        audioProcessor.computerKeyboardNoteOff (
+            computerKeyboardHeldMidiNote);
+    }
+
+    computerKeyboardHeldKeyCode = 0;
+    computerKeyboardHeldMidiNote = -1;
+}
+
 void NewProjectAudioProcessorEditor::mouseDown (const juce::MouseEvent& event)
 {
-    if (event.mods.isRightButtonDown()
+    // när FL flyttar fokus in i pluginet tar editorn tangenterna o spelar dom själv
+    grabKeyboardFocus();
+
+    const auto localEvent = event.getEventRelativeTo (this);
+    const auto position = localEvent.getPosition();
+
+    if (localEvent.mods.isRightButtonDown()
         &&
-        getFaceClickBounds().contains (event.getPosition()))
+        getFaceClickBounds().contains (position))
     {
         hidePresetGrid();
         showFaceMenu();
@@ -4449,8 +4976,6 @@ void NewProjectAudioProcessorEditor::mouseDown (const juce::MouseEvent& event)
     if (presetGrid != nullptr
         && presetGrid->isVisible())
     {
-        const auto position = event.getPosition();
-
         const bool clickedGrid = presetGrid->getBounds()
                 .contains (position);
 
@@ -4463,101 +4988,31 @@ void NewProjectAudioProcessorEditor::mouseDown (const juce::MouseEvent& event)
             hidePresetGrid();
         }
     }
-
-    grabKeyboardFocus();
-    juce::AudioProcessorEditor::mouseDown (event);
 }
 
 void NewProjectAudioProcessorEditor::mouseUp (const juce::MouseEvent& event)
 {
-    juce::AudioProcessorEditor::mouseUp (event);
-}
-
-
-int NewProjectAudioProcessorEditor::getComputerKeyboardNoteForIndex (int index) const
-{
-    static constexpr int notes[] =
-    {
-        60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71,
-        72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83
-    };
-
-    if (index < 0 || index >= static_cast<int> (std::size (notes)))
-        return -1;
-
-    return notes[index];
-}
-
-void NewProjectAudioProcessorEditor::updateComputerKeyboardState()
-{
-    if (! hasKeyboardFocus (true))
-    {
-        computerKeyboardHeld.fill (false);
-        computerKeyboardPressOrder.fill (0);
-        audioProcessor.setComputerKeyboardNote (-1);
-        return;
-    }
-
-    static constexpr int keyCodes[] =
-    {
-        'z', 's', 'x', 'd', 'c', 'v', 'g', 'b', 'h', 'n', 'j', 'm',
-        'q', '2', 'w', '3', 'e', 'r', '5', 't', '6', 'y', '7', 'u'
-    };
-
-    bool changed = false;
-
-    for (int i = 0; i < static_cast<int> (std::size (keyCodes)); ++i)
-    {
-        const bool isDown = juce::KeyPress::isKeyCurrentlyDown (keyCodes[i]);
-
-        if (computerKeyboardHeld[static_cast<size_t> (i)] != isDown)
-        {
-            computerKeyboardHeld[static_cast<size_t> (i)] = isDown;
-            changed = true;
-
-            if (isDown)
-                computerKeyboardPressOrder[static_cast<size_t> (i)] = ++computerKeyboardOrderCounter;
-            else
-                computerKeyboardPressOrder[static_cast<size_t> (i)] = 0;
-        }
-    }
-
-    if (! changed)
-        return;
-
-    int newestIndex = -1;
-    uint64_t newestOrder = 0;
-
-    for (int i = 0; i < static_cast<int> (computerKeyboardHeld.size()); ++i)
-    {
-        if (computerKeyboardHeld[static_cast<size_t> (i)]
-            && computerKeyboardPressOrder[static_cast<size_t> (i)] >= newestOrder)
-        {
-            newestOrder = computerKeyboardPressOrder[static_cast<size_t> (i)];
-            newestIndex = i;
-        }
-    }
-
-    audioProcessor.setComputerKeyboardNote (
-        newestIndex >= 0 ? getComputerKeyboardNoteForIndex (newestIndex) : -1);
+    juce::ignoreUnused (event);
 }
 
 bool NewProjectAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
-    updateComputerKeyboardState();
+    const int midiNote = midiNoteForComputerKey (key);
 
-    const int keyCode = juce::CharacterFunctions::toLowerCase (
-        static_cast<juce::juce_wchar> (key.getKeyCode()));
-
-    static constexpr int mappedKeys[] =
+    if (midiNote >= 0)
     {
-        'z', 's', 'x', 'd', 'c', 'v', 'g', 'b', 'h', 'n', 'j', 'm',
-        'q', '2', 'w', '3', 'e', 'r', '5', 't', '6', 'y', '7', 'u'
-    };
+        const int keyCode = key.getKeyCode();
 
-    for (const auto mappedKey : mappedKeys)
-        if (keyCode == mappedKey)
-            return true;
+        if (computerKeyboardHeldMidiNote != midiNote)
+        {
+            releaseComputerKeyboardNote();
+            audioProcessor.computerKeyboardNoteOn (midiNote);
+            computerKeyboardHeldMidiNote = midiNote;
+            computerKeyboardHeldKeyCode = keyCode;
+        }
+
+        return true;
+    }
 
     return juce::AudioProcessorEditor::keyPressed (key);
 }
@@ -4565,6 +5020,21 @@ bool NewProjectAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 bool NewProjectAudioProcessorEditor::keyStateChanged (bool isKeyDown)
 {
     juce::ignoreUnused (isKeyDown);
-    updateComputerKeyboardState();
-    return true;
+
+    if (computerKeyboardHeldMidiNote >= 0
+        && ! juce::KeyPress::isKeyCurrentlyDown (
+            computerKeyboardHeldKeyCode))
+    {
+        releaseComputerKeyboardNote();
+        return true;
+    }
+
+    return juce::AudioProcessorEditor::keyStateChanged (isKeyDown);
+}
+
+void NewProjectAudioProcessorEditor::focusLost (juce::Component::FocusChangeType cause)
+{
+    releaseComputerKeyboardNote();
+    audioProcessor.computerKeyboardAllNotesOff();
+    juce::AudioProcessorEditor::focusLost (cause);
 }

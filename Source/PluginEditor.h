@@ -6,33 +6,7 @@
 #include <memory>
 #include <functional>
 
-class FocusSafeSlider : public juce::Slider
-{
-public:
-    FocusSafeSlider() = default;
-    ~FocusSafeSlider() override = default;
-
-    void mouseDown (const juce::MouseEvent& event) override
-    {
-        juce::Slider::mouseDown (event);
-
-        if (auto* editor = findParentComponentOfClass<juce::AudioProcessorEditor>())
-            editor->grabKeyboardFocus();
-    }
-
-    void mouseUp (const juce::MouseEvent& event) override
-    {
-        juce::Slider::mouseUp (event);
-
-        if (auto* editor = findParentComponentOfClass<juce::AudioProcessorEditor>())
-            editor->grabKeyboardFocus();
-    }
-
-private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FocusSafeSlider)
-};
-
-class DonkSlider : public FocusSafeSlider
+class DonkSlider : public juce::Slider
 {
 public:
     DonkSlider() = default;
@@ -166,7 +140,7 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DonkSlider)
 };
 
-class PercentSlider : public FocusSafeSlider
+class PercentSlider : public juce::Slider
 {
 public:
     PercentSlider() = default;
@@ -383,7 +357,9 @@ public:
     }
 };
 
-class StarDonkHelpComponent : public juce::Component
+class StarDonkHelpComponent
+    : public juce::Component,
+      private juce::Thread
 {
 public:
     class HelpBodyComponent : public juce::Component
@@ -391,7 +367,16 @@ public:
     public:
         HelpBodyComponent()
         {
-            setSize (540, 940);
+            setSize (540, 1220);
+        }
+
+        void setMinimalistic (bool shouldBeMinimal)
+        {
+            if (minimalisticMode == shouldBeMinimal)
+                return;
+
+            minimalisticMode = shouldBeMinimal;
+            repaint();
         }
 
         void paint (juce::Graphics& g) override
@@ -399,6 +384,14 @@ public:
             int y = 8;
             const int x = 8;
             const int w = getWidth() - 22;
+
+            const auto titleColour = minimalisticMode
+                ? juce::Colours::white
+                : juce::Colour (0xffffd34e);
+
+            const auto bodyColour = minimalisticMode
+                ? juce::Colour (0xffd8d8d8)
+                : juce::Colour (0xffb9b3c6);
 
             auto drawSection = [&] (const juce::String& title,
                      const juce::String& body,
@@ -409,7 +402,7 @@ public:
                                 .withHeight (12.0f)
                                 .withStyle ("Bold")));
 
-                    g.setColour (juce::Colour (0xffffd34e));
+                    g.setColour (titleColour);
                     g.drawText (
                         title,
                         x,
@@ -424,12 +417,12 @@ public:
                                 .withName ("Arial")
                                 .withHeight (11.5f)));
 
-                    g.setColour (juce::Colour (0xffb9b3c6));
+                    g.setColour (bodyColour);
                     g.drawFittedText (
                         body,
                         juce::Rectangle<int> (x, y, w, bodyHeight),
                         juce::Justification::topLeft,
-                        10,
+                        20,
                         1.0f);
 
                     y += bodyHeight + 12;
@@ -439,74 +432,85 @@ public:
                 "KNOBS",
                 "CYKA = pitch drop   |   BLYAT = decay   |   DONK = FM knock   |   GOPNIK = FM ratio\n"
                 "KVASS = waveform   |   SEMECHKI = tone   |   HARD = body/sustain   |   BASS = drive",
-                34);
+                44);
 
             drawSection (
                 "EXTRA",
                 "BASSLINE changes the donk character. REVERB adds reverb lol. DECLICKER removes click from short notes or click problems; when enabled, STRENGTH changes how aggressive the smoothing is. "
                 "VOLUME should be obvious ;-)\nTURN OFF ANIMATIONS stops the fancy movement (incase you dont like fancy animations and/or get dizzy :-D).",
-                56);
+                82);
 
             drawSection (
                 "SIDECHAIN",
                 "It should be obvious what it does :) AMOUNT changes how much it ducks and POSITION moves where the deepest dip happens inside the donk. "
                 "If REVERB is also on, AFTER REVERB chooses whether the duck happens before or after the reverb.",
-                48);
+                66);
 
             drawSection (
                 "MINIMALISTIC",
                 "Makes StarDonk black and white, removes most fancy stuff and shows the real values instead of the DONK text. "
                 "It can be used together with ADVANCED MODE.",
-                34);
+                48);
 
             drawSection (
                 "ADVANCED MODE",
                 "Keeps the normal StarDonk donk core, then opens FM2, FM3 and FM4, FM envelopes, TX Wave 2 blends, optional sub, amp envelope, resonant filter and distortion mix. "
                 "FM1 is still the main donk. The extra operators colour the same carrier instead of playing separate layered notes. Everything can be changed manually and automated.",
-                50);
+                74);
 
             drawSection (
                 "EXPERIMENTAL FUN",
                 "try it out, its self explenatory i think",
-                24);
+                30);
 
             drawSection (
                 "RANDOM",
                 "RANDOM DONK generates a random donk. In ADVANCED MODE it can make a much wider range of donk families like hollow, bounce, metal shade, rubber, woody, glass, dirty, arcade, resonant and weird hybrids. EXPERIMENTAL CONTROL and EXPERIMENTAL RANDOM also work in ADVANCED MODE. Turning EXPERIMENTAL CONTROL off does not change the donk you already made. GIVE BACK DONK restores the sound from before the last random. "
                 "DONK LOOP SPEED changes how fast DONK LOOP repeats (1.00 sec is standard and the slowest setting). "
                 "EXPERIMENTAL CONTROL unlocks extreme knob ranges. EXPERIMENTAL RANDOM lets RANDOM DONK use those crazy ranges.",
-                42);
+                112);
 
             drawSection (
                 "PRESETS",
                 "SAVE writes .donk files. RANDOM NAME makes a blyatiful two-word name. Folders inside Documents\\StarDonk\\Presets can be browsed. "
                 "R rescans the preset folder.",
-                36);
+                50);
 
             drawSection (
                 "AUTOMATION",
                 "Move a control, then in FL Studio use Tools > Last tweaked > Create automation clip. "
                 "Advanced Mode controls are host-visible parameters too.",
-                34);
+                46);
 
             drawSection (
                 "FL STUDIO",
                 "To keep multiple StarDonk windows open at the same time: press F10 > General Settings and turn OFF Auto select linked modules. "
                 "You can also hold ALT while opening another StarDonk instance.",
-                42);
+                58);
 
             drawSection (
                 "FACE / FILES",
                 "Right-click the picture to use StarSlav or a custom PNG.\n"
                 "Presets: Documents\\StarDonk\\Presets\n"
                 "Pictures: Documents\\StarDonk\\Pictures\n"
+                "Exports: Documents\\StarDonk\\Exports\n"
                 "If you select a custom .png it will create a xml file in Documents\\StarDonk so you see your blyatiful picture everytime you load STARDONK :-)",
-                70);
+                112);
+
+            drawSection (
+                "ROOT / OCTAVE / EXPORT",
+                "DETECTED ROOT follows the current donk sound. ROOT NOTE changes how the donk is transposed. MATCH ROOT instantly sets ROOT NOTE to the detected root and keeps following it while the sound changes. Turning MATCH ROOT off returns ROOT NOTE to C. "
+                "OCTAVE moves the donk by whole octaves while staying on the same note name. RANDOM DONK normally resets OCTAVE to 0; FREEZE OCTAVE keeps your chosen octave. EXPORT WAV renders the current donk.",
+                92);
         }
+
+    private:
+        bool minimalisticMode = false;
     };
 
     StarDonkHelpComponent()
-        : youtubeLink (
+        : juce::Thread ("StarDonk Update Check"),
+          youtubeLink (
               "YouTube.com/@starslav",
               juce::URL ("https://www.youtube.com/@starslav")),
           instagramLink (
@@ -514,28 +518,56 @@ public:
               juce::URL ("https://instagram.com/starslavhardbass"))
     {
         setOpaque (false);
+
         closeButton.setButtonText ("X");
         closeButton.setWantsKeyboardFocus (false);
         closeButton.setMouseClickGrabsKeyboardFocus (false);
-        closeButton.setColour (
-            juce::TextButton::buttonColourId,
-            juce::Colour (0xff211b2c));
-        closeButton.setColour (
-            juce::TextButton::textColourOffId,
-            juce::Colour (0xffffd34e));
         closeButton.onClick = [this]()
             {
                 if (onClose)
                     onClose();
             };
 
-        youtubeLink.setColour (
-            juce::HyperlinkButton::textColourId,
-            juce::Colour (0xffffd34e));
+        versionLabel.setText (
+            "Version " + getStarDonkVersion(),
+            juce::dontSendNotification);
 
-        instagramLink.setColour (
-            juce::HyperlinkButton::textColourId,
-            juce::Colour (0xffffd34e));
+        versionLabel.setFont (juce::Font (juce::FontOptions()
+                    .withName ("Arial")
+                    .withHeight (11.5f)
+                    .withStyle ("Bold")));
+
+        versionLabel.setJustificationType (
+            juce::Justification::centredLeft);
+
+        updateStatusLabel.setText (
+            "Manual update check - nothing downloads automatically.",
+            juce::dontSendNotification);
+
+        updateStatusLabel.setFont (juce::Font (juce::FontOptions()
+                    .withName ("Arial")
+                    .withHeight (10.5f)));
+
+        updateStatusLabel.setJustificationType (
+            juce::Justification::centredLeft);
+
+        checkUpdateButton.setButtonText ("CHECK FOR UPDATES");
+        checkUpdateButton.setWantsKeyboardFocus (false);
+        checkUpdateButton.setMouseClickGrabsKeyboardFocus (false);
+        checkUpdateButton.onClick = [this]()
+            {
+                if (updateAvailable)
+                {
+                    juce::URL (latestReleaseUrl).launchInDefaultBrowser();
+
+                    updateStatusLabel.setText (
+                        "GitHub opened. Close your DAW, optionally back up the old VST3, then replace StarDonk.vst3.",
+                        juce::dontSendNotification);
+                    return;
+                }
+
+                beginUpdateCheck();
+            };
 
         youtubeLink.setWantsKeyboardFocus (false);
         instagramLink.setWantsKeyboardFocus (false);
@@ -548,28 +580,57 @@ public:
             true,
             false);
 
-        helpViewport.setScrollOnDragMode (juce::Viewport::ScrollOnDragMode::all);
-        helpViewport.setColour (
-            juce::ScrollBar::thumbColourId,
-            juce::Colour (0xff5a5368));
+        helpViewport.setScrollOnDragEnabled (true);
 
         addAndMakeVisible (closeButton);
         addAndMakeVisible (helpViewport);
+        addAndMakeVisible (versionLabel);
+        addAndMakeVisible (updateStatusLabel);
+        addAndMakeVisible (checkUpdateButton);
         addAndMakeVisible (youtubeLink);
         addAndMakeVisible (instagramLink);
+
+        applyColours();
+    }
+
+    ~StarDonkHelpComponent() override
+    {
+        signalThreadShouldExit();
+        stopThread (6000);
     }
 
     std::function<void()> onClose;
+
+    void setMinimalistic (bool shouldBeMinimal)
+    {
+        if (minimalisticMode == shouldBeMinimal)
+            return;
+
+        minimalisticMode = shouldBeMinimal;
+        helpBody.setMinimalistic (minimalisticMode);
+        applyColours();
+        repaint();
+    }
 
     void paint (juce::Graphics& g) override
     {
         g.setColour (juce::Colours::black.withAlpha (0.72f));
         g.fillRect (getLocalBounds());
+
         const auto panel = getPanelBounds();
         const auto panelF = panel.toFloat();
-        g.setColour (juce::Colour (0xff100d17));
+
+        const auto panelColour = minimalisticMode
+            ? juce::Colours::black
+            : juce::Colour (0xff100d17);
+
+        const auto accentColour = minimalisticMode
+            ? juce::Colours::white
+            : juce::Colour (0xffffcc33);
+
+        g.setColour (panelColour);
         g.fillRoundedRectangle (panelF, 14.0f);
-        g.setColour (juce::Colour (0xffffcc33));
+        g.setColour (accentColour);
         g.drawRoundedRectangle (
             panelF.reduced (0.5f),
             14.0f,
@@ -580,7 +641,7 @@ public:
                     .withHeight (22.0f)
                     .withStyle ("Bold")));
 
-        g.setColour (juce::Colour (0xffffd34e));
+        g.setColour (accentColour);
         g.drawText (
             "STAR DONK - QUICK HELP",
             panel.getX() + 22,
@@ -588,6 +649,17 @@ public:
             panel.getWidth() - 70,
             30,
             juce::Justification::centredLeft);
+
+        const int footerTop = panel.getBottom() - 96;
+
+        g.setColour (minimalisticMode
+            ? juce::Colour (0xff5a5a5a)
+            : juce::Colour (0xff30293d));
+
+        g.drawHorizontalLine (
+            footerTop,
+            static_cast<float> (panel.getX() + 18),
+            static_cast<float> (panel.getRight() - 18));
 
         g.setFont (juce::Font (juce::FontOptions()
                     .withName ("Arial")
@@ -599,7 +671,7 @@ public:
         g.drawText (
             "YouTube:",
             panel.getX() + 22,
-            panel.getBottom() - 57,
+            footerTop + 43,
             70,
             22,
             juce::Justification::centredLeft);
@@ -607,7 +679,7 @@ public:
         g.drawText (
             "Instagram:",
             panel.getX() + 22,
-            panel.getBottom() - 31,
+            footerTop + 67,
             70,
             22,
             juce::Justification::centredLeft);
@@ -616,6 +688,7 @@ public:
     void resized() override
     {
         const auto panel = getPanelBounds();
+        const int footerTop = panel.getBottom() - 96;
 
         closeButton.setBounds (
             panel.getRight() - 38,
@@ -627,38 +700,294 @@ public:
             panel.getX() + 16,
             panel.getY() + 50,
             panel.getWidth() - 32,
-            panel.getHeight() - 122);
+            footerTop - (panel.getY() + 56));
 
         helpBody.setSize (
-            helpViewport.getWidth() - 14,
-            940);
+            juce::jmax (100, helpViewport.getWidth() - 14),
+            1220);
+
+        versionLabel.setBounds (
+            panel.getX() + 22,
+            footerTop + 7,
+            120,
+            24);
+
+        checkUpdateButton.setBounds (
+            panel.getRight() - 178,
+            footerTop + 6,
+            156,
+            25);
+
+        updateStatusLabel.setBounds (
+            panel.getX() + 145,
+            footerTop + 6,
+            juce::jmax (80, panel.getWidth() - 350),
+            26);
 
         youtubeLink.setBounds (
             panel.getX() + 92,
-            panel.getBottom() - 57,
+            footerTop + 43,
             panel.getWidth() - 120,
             22);
 
         instagramLink.setBounds (
             panel.getX() + 92,
-            panel.getBottom() - 31,
+            footerTop + 67,
             panel.getWidth() - 120,
             22);
     }
 
 private:
+    static juce::String getStarDonkVersion()
+    {
+        return "1.0.1";
+    }
+
+    static juce::String cleanVersionString (juce::String version)
+    {
+        version = version.trim();
+
+        while (version.startsWithIgnoreCase ("v"))
+            version = version.substring (1);
+
+        const int dash = version.indexOfChar ('-');
+        if (dash >= 0)
+            version = version.substring (0, dash);
+
+        return version;
+    }
+
+    static bool isVersionNewer (
+        const juce::String& possibleNewVersion,
+        const juce::String& currentVersion)
+    {
+        const auto newVersion = cleanVersionString (possibleNewVersion);
+        const auto oldVersion = cleanVersionString (currentVersion);
+
+        juce::StringArray newParts;
+        juce::StringArray oldParts;
+        newParts.addTokens (newVersion, ".", "");
+        oldParts.addTokens (oldVersion, ".", "");
+
+        const int count = juce::jmax (newParts.size(), oldParts.size());
+
+        for (int i = 0; i < count; ++i)
+        {
+            const int newer = i < newParts.size()
+                ? newParts[i].getIntValue()
+                : 0;
+
+            const int older = i < oldParts.size()
+                ? oldParts[i].getIntValue()
+                : 0;
+
+            if (newer != older)
+                return newer > older;
+        }
+
+        return false;
+    }
+
+    void beginUpdateCheck()
+    {
+        if (isThreadRunning())
+            return;
+
+        updateAvailable = false;
+        latestVersionTag.clear();
+        checkUpdateButton.setEnabled (false);
+        checkUpdateButton.setButtonText ("CHECKING...");
+        updateStatusLabel.setText (
+            "Checking GitHub...",
+            juce::dontSendNotification);
+
+        startThread();
+    }
+
+    void run() override
+    {
+        juce::String foundTag;
+        juce::String errorMessage;
+        int statusCode = 0;
+
+        const juce::URL apiUrl (
+            "https://api.github.com/repos/starslavhardbass/StarDonk/releases/latest");
+
+        const auto options = juce::URL::InputStreamOptions (
+                juce::URL::ParameterHandling::inAddress)
+            .withConnectionTimeoutMs (5000)
+            .withNumRedirectsToFollow (5)
+            .withStatusCode (&statusCode)
+            .withExtraHeaders (
+                "User-Agent: StarDonk-VST3\r\n"
+                "Accept: application/vnd.github+json\r\n");
+
+        if (auto stream = apiUrl.createInputStream (options))
+        {
+            if (! threadShouldExit())
+            {
+                const auto reply = stream->readEntireStreamAsString();
+                const auto parsed = juce::JSON::parse (reply);
+
+                if (auto* object = parsed.getDynamicObject())
+                {
+                    foundTag = object->getProperty ("tag_name").toString().trim();
+
+                    if (foundTag.isEmpty())
+                        errorMessage = "GitHub returned a release without a version tag.";
+                }
+                else
+                {
+                    errorMessage = "Could not read the GitHub release information.";
+                }
+            }
+        }
+        else
+        {
+            errorMessage = statusCode > 0
+                ? "Could not check GitHub (HTTP " + juce::String (statusCode) + ")."
+                : "Could not connect to GitHub.";
+        }
+
+        if (threadShouldExit())
+            return;
+
+        auto safeThis = juce::Component::SafePointer<StarDonkHelpComponent> (this);
+
+        juce::MessageManager::callAsync (
+            [safeThis, foundTag, errorMessage]() mutable
+            {
+                if (safeThis != nullptr)
+                    safeThis->finishUpdateCheck (foundTag, errorMessage);
+            });
+    }
+
+    void finishUpdateCheck (
+        const juce::String& foundTag,
+        const juce::String& errorMessage)
+    {
+        checkUpdateButton.setEnabled (true);
+
+        if (errorMessage.isNotEmpty())
+        {
+            updateAvailable = false;
+            checkUpdateButton.setButtonText ("CHECK AGAIN");
+            updateStatusLabel.setText (
+                errorMessage,
+                juce::dontSendNotification);
+            return;
+        }
+
+        latestVersionTag = foundTag;
+
+        const auto currentVersion = getStarDonkVersion();
+        updateAvailable = isVersionNewer (
+            latestVersionTag,
+            currentVersion);
+
+        if (updateAvailable)
+        {
+            checkUpdateButton.setButtonText ("DOWNLOAD UPDATE");
+            updateStatusLabel.setText (
+                "New version: " + latestVersionTag,
+                juce::dontSendNotification);
+
+            juce::AlertWindow::showMessageBoxAsync (
+                juce::MessageBoxIconType::InfoIcon,
+                "StarDonk update available",
+                "You have StarDonk v" + cleanVersionString (currentVersion)
+                    + " and " + latestVersionTag + " is available.\n\n"
+                      "There might will be some new presets ;)\n\n"
+                      "Press DOWNLOAD UPDATE to open the GitHub release page.\n\n"
+                      "To update: close your DAW, optionally copy your old StarDonk.vst3 somewhere outside the VST3 folder as a backup, then replace the installed StarDonk.vst3 with the new one."
+            );
+        }
+        else
+        {
+            checkUpdateButton.setButtonText ("CHECK AGAIN");
+            updateStatusLabel.setText (
+                "You have the latest version.",
+                juce::dontSendNotification);
+        }
+    }
+
+    void applyColours()
+    {
+        const auto accent = minimalisticMode
+            ? juce::Colours::white
+            : juce::Colour (0xffffd34e);
+
+        const auto buttonBackground = minimalisticMode
+            ? juce::Colours::black
+            : juce::Colour (0xff211b2c);
+
+        const auto secondaryText = minimalisticMode
+            ? juce::Colour (0xffd8d8d8)
+            : juce::Colour (0xffb9b3c6);
+
+        closeButton.setColour (
+            juce::TextButton::buttonColourId,
+            buttonBackground);
+        closeButton.setColour (
+            juce::TextButton::textColourOffId,
+            accent);
+
+        checkUpdateButton.setColour (
+            juce::TextButton::buttonColourId,
+            buttonBackground);
+        checkUpdateButton.setColour (
+            juce::TextButton::textColourOffId,
+            accent);
+
+        versionLabel.setColour (
+            juce::Label::textColourId,
+            accent);
+
+        updateStatusLabel.setColour (
+            juce::Label::textColourId,
+            secondaryText);
+
+        youtubeLink.setColour (
+            juce::HyperlinkButton::textColourId,
+            accent);
+
+        instagramLink.setColour (
+            juce::HyperlinkButton::textColourId,
+            accent);
+
+        helpViewport.setColour (
+            juce::ScrollBar::thumbColourId,
+            minimalisticMode
+                ? juce::Colour (0xffbdbdbd)
+                : juce::Colour (0xff5a5368));
+    }
+
     juce::Rectangle<int> getPanelBounds() const
     {
+        const int panelHeight = juce::jmin (
+            590,
+            juce::jmax (360, getHeight() - 56));
+
         return juce::Rectangle<int> (
             35,
             28,
             getWidth() - 70,
-            550);
+            panelHeight);
     }
+
+    bool minimalisticMode = false;
+    bool updateAvailable = false;
+    juce::String latestVersionTag;
+
+    const juce::String latestReleaseUrl =
+        "https://github.com/starslavhardbass/StarDonk/releases/latest";
 
     juce::TextButton closeButton;
     juce::Viewport helpViewport;
     HelpBodyComponent helpBody;
+    juce::Label versionLabel;
+    juce::Label updateStatusLabel;
+    juce::TextButton checkUpdateButton;
     juce::HyperlinkButton youtubeLink;
     juce::HyperlinkButton instagramLink;
 
@@ -678,17 +1007,20 @@ public:
 
     void resized() override;
 
-    void mouseDown (
-        const juce::MouseEvent& event) override;
-
-    void mouseUp (
-        const juce::MouseEvent& event) override;
-
     bool keyPressed (
         const juce::KeyPress& key) override;
 
     bool keyStateChanged (
         bool isKeyDown) override;
+
+    void focusLost (
+        juce::Component::FocusChangeType cause) override;
+
+    void mouseDown (
+        const juce::MouseEvent& event) override;
+
+    void mouseUp (
+        const juce::MouseEvent& event) override;
 
 private:
     NewProjectAudioProcessor& audioProcessor;
@@ -732,7 +1064,7 @@ private:
     juce::ToggleButton declickerToggle;
 
     // donk loop grejen
-    FocusSafeSlider donkLoopSpeedSlider;
+    juce::Slider donkLoopSpeedSlider;
     juce::Label donkLoopSpeedLabel;
     juce::TextButton donkLoopButton;
 
@@ -747,6 +1079,30 @@ private:
     juce::TextButton nextPresetButton;
     juce::TextButton savePresetButton;
 
+    // root grejer: detected e bara info, ROOT NOTE transponerar playback men petar inte rattar/preset värden
+    juce::Label detectedRootTitleLabel;
+    juce::Label detectedRootValueLabel;
+    juce::Label assignedRootTitleLabel;
+    juce::ComboBox assignedRootBox;
+    juce::ToggleButton matchRootToggle;
+    juce::Label octaveTitleLabel;
+    juce::ComboBox octaveBox;
+    juce::ToggleButton freezeOctaveToggle;
+    juce::TextButton exportWavButton;
+    std::unique_ptr<juce::FileChooser> wavFileChooser;
+
+    // qwerty fallback när FL tappar sitt egna typing keyboard fokus
+    int computerKeyboardHeldKeyCode = 0;
+    int computerKeyboardHeldMidiNote = -1;
+    int midiNoteForComputerKey (const juce::KeyPress& key) const;
+    void releaseComputerKeyboardNote();
+
+    // detected root ska följa soundet live men inte spamma analys varje frame
+    bool rootAnalysisSignatureReady = false;
+    bool rootAnalysisPending = false;
+    std::size_t lastRootAnalysisSignature = 0;
+    double lastRootAnalysisTimeMs = 0.0;
+
     // hjälp o snabb instruktion typ
     juce::TextButton helpButton;
 
@@ -755,7 +1111,7 @@ private:
 
     // alla synth motorns kontroller, funkar i normal o minimal mode
     juce::ToggleButton advancedModeToggle;
-    std::array<FocusSafeSlider, NewProjectAudioProcessor::AdvancedParameterCount> advancedSliders;
+    std::array<juce::Slider, NewProjectAudioProcessor::AdvancedParameterCount> advancedSliders;
     std::array<juce::Label, NewProjectAudioProcessor::AdvancedParameterCount> advancedLabels;
     juce::ToggleButton animationsOffToggle;
 
@@ -880,6 +1236,10 @@ private:
 
     void refreshPresetBox();
     void updateSlidersFromProcessor();
+    void refreshRootControls (bool analyseIfMissing);
+    std::size_t getRootAnalysisSignature() const;
+    void updateLiveRootDetection();
+    void exportDonkAsWav();
     void randomize();
     void previousPreset();
     void nextPreset();
@@ -920,12 +1280,6 @@ private:
 
     juce::Image loadFaceImageFromFile (
         const juce::File& file) const;
-
-    void updateComputerKeyboardState();
-    int getComputerKeyboardNoteForIndex (int index) const;
-    std::array<bool, 24> computerKeyboardHeld {};
-    std::array<uint64_t, 24> computerKeyboardPressOrder {};
-    uint64_t computerKeyboardOrderCounter = 0;
 
     juce::Rectangle<int> getFaceClickBounds() const;
     void timerCallback() override;

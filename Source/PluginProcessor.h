@@ -178,7 +178,23 @@ public:
     void setExperimentalRandomEnabled (bool enabled);
     int getRootNote() const;
     void setRootNote (int midiNote);
-    void setComputerKeyboardNote (int midiNote);
+    int getOctaveShift() const;
+    void setOctaveShift (int octaves);
+
+    // qwerty noter när plugin fönstret själv råkar få fokus i FL
+    void computerKeyboardNoteOn (int midiNote);
+    void computerKeyboardNoteOff (int midiNote);
+    void computerKeyboardAllNotesOff();
+
+    // bara metadata för donkens egen ton, rör inte synthens pitch eller rattar
+    void analyseCurrentDonkRoot (bool alsoSetAssignedRoot = true);
+    int getDetectedDonkRootMidiNote() const;
+    int getDetectedDonkRootPitchClass() const;
+    int getAssignedDonkRootPitchClass() const;
+    void setAssignedDonkRootPitchClass (int pitchClass);
+    juce::String getDetectedDonkRootName() const;
+    juce::String getAssignedDonkRootName() const;
+    bool exportCurrentDonkToWav (const juce::File& file) const;
 
     enum class FaceMode
     {
@@ -228,6 +244,11 @@ public:
 
         // djupa synth motor värden, gamla presets kör bara default
         std::array<float, AdvancedParameterCount> advancedValues {};
+
+        // bara info om tonarten typ, gamla presets har -1 o analyseras när dom laddas
+        int detectedRootMidiNote = -1;
+        int assignedRootPitchClass = -1;
+        int octaveShift = 0;
     };
     int getNumPresets() const;
 
@@ -358,12 +379,33 @@ private:
 
     // root note param som hosten kan se
     juce::AudioParameterChoice* rootNoteParameter = nullptr;
+
+    // intern qwerty midi så FL fokus strul inte dödar tangentbordet
+    juce::MidiKeyboardState computerKeyboardState;
     static constexpr int rootNoteMinimum = 36;
     static constexpr int rootNoteMaximum = 84;
     static constexpr int rootNoteNeutral = 60;
-    std::atomic<int> computerKeyboardRequestedNote { -1 };
-    int computerKeyboardPlayingNote = -1;
     int transposeIncomingMidiNote (int midiNote) const;
+
+    // detected e bara info, assigned root o octave styr playback men rör inte rattarna
+    std::atomic<int> detectedDonkRootMidiNote { -1 };
+    std::atomic<int> assignedDonkRootPitchClass { -1 };
+
+    // oktav flyttar bara 12 semitoner åt gången så root/key stannar samma
+    std::atomic<int> octaveShift { 0 };
+
+    juce::AudioBuffer<float> renderCurrentDonkReference (
+        double sampleRate,
+        double renderSeconds,
+        bool includeEffects,
+        bool applyOctaveShift = false) const;
+
+    int detectRootMidiNoteFromBuffer (
+        const juce::AudioBuffer<float>& buffer,
+        double sampleRate) const;
+
+    static juce::String donkPitchClassName (int pitchClass);
+
     std::atomic<float> pitchDrop { 7.0f };
     std::atomic<float> decay     { 0.28f };
     std::atomic<float> knock     { 2.0f };
@@ -412,6 +454,9 @@ private:
 
     // loop state bara för audio tråden
     bool audioLoopWasEnabled = false;
+
+    // root byte ska kunna trigga om loop direkt utan o pilla audio state från ui tråden
+    std::atomic<bool> loopRootRetriggerRequested { false };
 
     // samples sen senaste loop hit
     int64_t loopSampleCounter = 0;

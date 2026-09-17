@@ -24,6 +24,20 @@ namespace
         return choices;
     }
 
+    juce::String pitchClassNameForDonk (int pitchClass)
+    {
+        static const char* names[] =
+        {
+            "C", "C#", "D", "D#", "E", "F",
+            "F#", "G", "G#", "A", "A#", "B"
+        };
+
+        if (pitchClass < 0)
+            return "--";
+
+        return names[juce::jlimit (0, 11, pitchClass % 12)];
+    }
+
     struct AdvancedParameterDefinition
     {
         const char* id;
@@ -479,33 +493,15 @@ void NewProjectAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             declickSamplesRemaining = declickTotalSamples;
         };
 
-    const int requestedComputerNote = computerKeyboardRequestedNote.load (
-        std::memory_order_acquire);
-
-    if (requestedComputerNote != computerKeyboardPlayingNote)
-    {
-        if (computerKeyboardPlayingNote >= 0)
-            voice.noteOff();
-
-        computerKeyboardPlayingNote = requestedComputerNote;
-
-        if (computerKeyboardPlayingNote >= 0)
-        {
-            startDeclick();
-            sidechainSampleCounter = 0;
-
-            voice.noteOn (
-                transposeIncomingMidiNote (computerKeyboardPlayingNote),
-                1.0f);
-
-            noteTriggerCount.fetch_add (
-                1,
-                std::memory_order_relaxed);
-        }
-    }
-
     const int numSamples = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
+
+    // om pluginet har keyboard fokus kör våra qwerty noter in i samma midi buffer
+    computerKeyboardState.processNextMidiBuffer (
+        midiMessages,
+        0,
+        numSamples,
+        true);
 
     if (numSamples > sidechainGainScratch.getNumSamples())
     {
@@ -524,6 +520,9 @@ void NewProjectAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     const bool requestedLoopState = donkLoopEnabled.load()
         || funDonkLoopEnabled.load();
 
+    const bool retriggerForRoot = requestedLoopState
+        && loopRootRetriggerRequested.exchange (false);
+
     if (! requestedLoopState)
     {
         if (audioLoopWasEnabled)
@@ -533,7 +532,7 @@ void NewProjectAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         loopSampleCounter = 0;
         loopNoteCounter = 0;
     }
-    else if (! audioLoopWasEnabled)
+    else if (! audioLoopWasEnabled || retriggerForRoot)
     {
         audioLoopWasEnabled = true;
         loopSampleCounter = 0;
@@ -1392,26 +1391,521 @@ void NewProjectAudioProcessor::setRootNote (int midiNote)
             midiNote);
 
     const int choiceIndex = clampedNote - rootNoteMinimum;
+    assignedDonkRootPitchClass.store (((clampedNote % 12) + 12) % 12);
 
     rootNoteParameter->setValueNotifyingHost (
         rootNoteParameter->convertTo0to1 (static_cast<float> (choiceIndex)));
+
+    // om loopen går så hör man root ändringen direkt på nästa audio block
+    if (donkLoopEnabled.load() || funDonkLoopEnabled.load())
+        loopRootRetriggerRequested.store (true);
 }
 
-void NewProjectAudioProcessor::setComputerKeyboardNote (int midiNote)
+void NewProjectAudioProcessor::computerKeyboardNoteOn (int midiNote)
 {
-    computerKeyboardRequestedNote.store (
-        midiNote < 0 ? -1 : juce::jlimit (0, 127, midiNote),
-        std::memory_order_release);
+    computerKeyboardState.noteOn (
+        1,
+        juce::jlimit (0, 127, midiNote),
+        1.0f);
+}
+
+void NewProjectAudioProcessor::computerKeyboardNoteOff (int midiNote)
+{
+    computerKeyboardState.noteOff (
+        1,
+        juce::jlimit (0, 127, midiNote),
+        0.0f);
+}
+
+void NewProjectAudioProcessor::computerKeyboardAllNotesOff()
+{
+    computerKeyboardState.allNotesOff (1);
+}
+
+int NewProjectAudioProcessor::getOctaveShift() const
+{
+    return juce::jlimit (-2, 2, octaveShift.load());
+}
+
+void NewProjectAudioProcessor::setOctaveShift (int octaves)
+{
+    octaveShift.store (juce::jlimit (-2, 2, octaves));
+
+    // om loopen går så hör man oktaven direkt typ
+    if (donkLoopEnabled.load() || funDonkLoopEnabled.load())
+        loopRootRetriggerRequested.store (true);
 }
 
 int NewProjectAudioProcessor::transposeIncomingMidiNote (int midiNote) const
 {
-    const int semitoneOffset = rootNoteNeutral - getRootNote();
+    const int semitoneOffset = rootNoteNeutral - getRootNote()
+        + getOctaveShift() * 12;
 
     return juce::jlimit (
         0,
         127,
         midiNote + semitoneOffset);
+}
+
+juce::String NewProjectAudioProcessor::donkPitchClassName (int pitchClass)
+{
+    return pitchClassNameForDonk (pitchClass);
+}
+
+int NewProjectAudioProcessor::getDetectedDonkRootMidiNote() const
+{
+    return detectedDonkRootMidiNote.load();
+}
+
+int NewProjectAudioProcessor::getDetectedDonkRootPitchClass() const
+{
+    const int midiNote = getDetectedDonkRootMidiNote();
+    return midiNote >= 0 ? midiNote % 12 : -1;
+}
+
+int NewProjectAudioProcessor::getAssignedDonkRootPitchClass() const
+{
+    return assignedDonkRootPitchClass.load();
+}
+
+void NewProjectAudioProcessor::setAssignedDonkRootPitchClass (int pitchClass)
+{
+    assignedDonkRootPitchClass.store (
+        pitchClass < 0 ? -1 : juce::jlimit (0, 11, pitchClass));
+}
+
+juce::String NewProjectAudioProcessor::getDetectedDonkRootName() const
+{
+    return donkPitchClassName (getDetectedDonkRootPitchClass());
+}
+
+juce::String NewProjectAudioProcessor::getAssignedDonkRootName() const
+{
+    return donkPitchClassName (getAssignedDonkRootPitchClass());
+}
+
+juce::AudioBuffer<float> NewProjectAudioProcessor::renderCurrentDonkReference (
+    double sampleRate,
+    double renderSeconds,
+    bool includeEffects,
+    bool applyOctaveShift) const
+{
+    const double safeSampleRate = sampleRate >= 8000.0 ? sampleRate : 44100.0;
+    const int totalSamples = juce::jmax (
+        1,
+        static_cast<int> (std::ceil (safeSampleRate * renderSeconds)));
+
+    juce::AudioBuffer<float> rendered (2, totalSamples);
+    rendered.clear();
+
+    std::array<float, AdvancedParameterCount> advancedSnapshot {};
+
+    for (int i = 0; i < AdvancedParameterCount; ++i)
+        advancedSnapshot[static_cast<size_t> (i)] = getAdvancedParameterValue (i);
+
+    DonkVoice renderVoice;
+    renderVoice.prepare (safeSampleRate);
+    renderVoice.setBasslineEnabled (getBasslineEnabled());
+
+    // samma C test-hit som donk loopen använder, men vi rör aldrig riktiga voicen här
+    const int renderMidiNote = juce::jlimit (
+        0,
+        127,
+        60 + (applyOctaveShift ? getOctaveShift() * 12 : 0));
+    renderVoice.noteOn (renderMidiNote, 1.0f);
+
+    const int noteOffSample = juce::jlimit (
+        1,
+        totalSamples,
+        static_cast<int> (safeSampleRate * donkLoopNoteLengthSeconds));
+
+    juce::AudioBuffer<float> sidechainGains (1, totalSamples);
+    sidechainGains.clear();
+
+    float sidechainSmoothed = 1.0f;
+    int64_t sidechainCounter = 0;
+    const bool sidechainOn = includeEffects && getSidechainEnabled();
+    const bool useReverb = includeEffects && getReverbEnabled();
+    const bool sidechainPostReverb = sidechainOn
+        && useReverb
+        && getSidechainAfterReverb();
+
+    for (int sample = 0; sample < totalSamples; ++sample)
+    {
+        if (sample == noteOffSample)
+            renderVoice.noteOff();
+
+        float output = renderVoice.process (
+            getPitchDrop(),
+            getDecay(),
+            getKnock(),
+            getRatio(),
+            getShape(),
+            getTone(),
+            getBody(),
+            getDrive(),
+            advancedSnapshot,
+            getAdvancedModeEnabled());
+
+        float targetSidechainGain = 1.0f;
+
+        if (sidechainOn)
+        {
+            const float amount = juce::jlimit (0.0f, 1.0f, getSidechainAmount());
+
+            if (amount > 0.0001f)
+            {
+                const double windowSeconds = juce::jlimit (
+                    0.10,
+                    1.50,
+                    static_cast<double> (juce::jmax (0.05f, getDecay())) * 1.10);
+
+                const int64_t windowSamples = juce::jmax<int64_t> (
+                    1,
+                    static_cast<int64_t> (safeSampleRate * windowSeconds));
+
+                if (sidechainCounter < windowSamples)
+                {
+                    const float progress = static_cast<float> (sidechainCounter)
+                        / static_cast<float> (windowSamples);
+
+                    const float centre = juce::jlimit (
+                        0.0f,
+                        1.0f,
+                        getSidechainPosition());
+
+                    const float distance = (progress - centre) / 0.16f;
+                    const float duckShape = std::exp (-0.5f * distance * distance);
+                    targetSidechainGain = 1.0f - amount * 0.98f * duckShape;
+                }
+            }
+
+            const float clickProtection = getDeclickerEnabled()
+                ? std::pow (juce::jlimit (0.0f, 1.0f, getDeclickerStrength()), 1.25f)
+                : 0.0f;
+
+            const float duckDownTime = 0.0025f + clickProtection * 0.0275f;
+            const float duckUpTime = 0.0100f + clickProtection * 0.0400f;
+            const float smoothingTime = targetSidechainGain < sidechainSmoothed
+                ? duckDownTime
+                : duckUpTime;
+
+            const float smoothing = 1.0f
+                - std::exp (-1.0f / static_cast<float> (safeSampleRate * smoothingTime));
+
+            sidechainSmoothed += (targetSidechainGain - sidechainSmoothed) * smoothing;
+        }
+
+        sidechainGains.setSample (0, sample, sidechainSmoothed);
+
+        if (sidechainOn && ! sidechainPostReverb)
+            output *= sidechainSmoothed;
+
+        rendered.setSample (0, sample, output);
+        rendered.setSample (1, sample, output);
+        ++sidechainCounter;
+    }
+
+    if (useReverb && getReverbMix() > 0.0001f)
+    {
+        juce::Reverb renderReverb;
+        juce::Reverb::Parameters parameters;
+        const float mix = juce::jlimit (0.0f, 1.0f, getReverbMix());
+        parameters.roomSize = 0.45f + mix * 0.45f;
+        parameters.damping = 0.35f;
+        parameters.wetLevel = mix * 0.85f;
+        parameters.dryLevel = 1.0f - mix * 0.30f;
+        parameters.width = 1.0f;
+        parameters.freezeMode = 0.0f;
+        renderReverb.setSampleRate (safeSampleRate);
+        renderReverb.setParameters (parameters);
+        renderReverb.processStereo (
+            rendered.getWritePointer (0),
+            rendered.getWritePointer (1),
+            totalSamples);
+    }
+
+    if (sidechainPostReverb)
+    {
+        const auto* gains = sidechainGains.getReadPointer (0);
+
+        for (int channel = 0; channel < rendered.getNumChannels(); ++channel)
+        {
+            auto* samples = rendered.getWritePointer (channel);
+
+            for (int sample = 0; sample < totalSamples; ++sample)
+                samples[sample] *= gains[sample];
+        }
+    }
+
+    if (includeEffects)
+        rendered.applyGain (juce::jlimit (0.0f, 1.0f, getVolume()));
+
+    return rendered;
+}
+
+int NewProjectAudioProcessor::detectRootMidiNoteFromBuffer (
+    const juce::AudioBuffer<float>& buffer,
+    double sampleRate) const
+{
+    if (buffer.getNumChannels() <= 0
+        || buffer.getNumSamples() < 256
+        || sampleRate < 8000.0)
+    {
+        return -1;
+    }
+
+    const auto* samples = buffer.getReadPointer (0);
+
+    // vi lyssnar tidigt i donk kroppen, inte hela svansen som nästan alltid landar på C
+    const int startSample = juce::jlimit (
+        0,
+        buffer.getNumSamples() - 1,
+        static_cast<int> (sampleRate * 0.012));
+
+    const int endSample = juce::jlimit (
+        startSample + 1,
+        buffer.getNumSamples(),
+        static_cast<int> (sampleRate * 0.090));
+
+    const int count = endSample - startSample;
+
+    if (count < 256)
+        return -1;
+
+    double mean = 0.0;
+    double energy = 0.0;
+
+    for (int i = startSample; i < endSample; ++i)
+        mean += samples[i];
+
+    mean /= static_cast<double> (count);
+
+    for (int i = startSample; i < endSample; ++i)
+    {
+        const double x = static_cast<double> (samples[i]) - mean;
+        energy += x * x;
+    }
+
+    if (energy < 1.0e-10)
+        return -1;
+
+    int bestMidiNote = -1;
+    double bestPower = 0.0;
+
+    // hitta starkaste tonala delen i själva donk hitten
+    // ingen low-note bias här för då vann C typ jämt
+    for (int midiNote = 36; midiNote <= 96; ++midiNote)
+    {
+        const double frequency = juce::MidiMessage::getMidiNoteInHertz (midiNote);
+
+        if (frequency >= sampleRate * 0.45)
+            break;
+
+        const double omega = juce::MathConstants<double>::twoPi
+            * frequency
+            / sampleRate;
+
+        const double coefficient = 2.0 * std::cos (omega);
+        double q1 = 0.0;
+        double q2 = 0.0;
+
+        for (int n = 0; n < count; ++n)
+        {
+            const int index = startSample + n;
+
+            const double phase = count > 1
+                ? static_cast<double> (n)
+                    / static_cast<double> (count - 1)
+                : 0.0;
+
+            const double window = 0.5
+                - 0.5 * std::cos (
+                    juce::MathConstants<double>::twoPi * phase);
+
+            const double x = (
+                static_cast<double> (samples[index]) - mean)
+                * window;
+
+            const double q0 = coefficient * q1 - q2 + x;
+            q2 = q1;
+            q1 = q0;
+        }
+
+        const double power = juce::jmax (
+            0.0,
+            q1 * q1 + q2 * q2 - coefficient * q1 * q2);
+
+        if (power > bestPower)
+        {
+            bestPower = power;
+            bestMidiNote = midiNote;
+        }
+    }
+
+    return bestMidiNote;
+}
+
+void NewProjectAudioProcessor::analyseCurrentDonkRoot (bool alsoSetAssignedRoot)
+{
+    const double sampleRate = currentSampleRate >= 8000.0
+        ? currentSampleRate
+        : 44100.0;
+
+    const auto buffer = renderCurrentDonkReference (
+        sampleRate,
+        0.90,
+        false,
+        false);
+
+    const int detectedMidi = detectRootMidiNoteFromBuffer (buffer, sampleRate);
+    detectedDonkRootMidiNote.store (detectedMidi);
+
+    if (alsoSetAssignedRoot)
+    {
+        assignedDonkRootPitchClass.store (
+            detectedMidi >= 0 ? detectedMidi % 12 : -1);
+    }
+}
+
+bool NewProjectAudioProcessor::exportCurrentDonkToWav (const juce::File& file) const
+{
+    if (file == juce::File())
+        return false;
+
+    const double sampleRate = currentSampleRate >= 8000.0
+        ? currentSampleRate
+        : 44100.0;
+
+    const double tailSeconds = getReverbEnabled()
+        ? 5.0
+        : juce::jlimit (2.0, 5.0, static_cast<double> (getDecay()) * 2.0 + 1.5);
+
+    auto buffer = renderCurrentDonkReference (
+        sampleRate,
+        tailSeconds,
+        true,
+        true);
+
+    auto outputFile = file.hasFileExtension ("wav")
+        ? file
+        : file.withFileExtension ("wav");
+
+    if (outputFile.existsAsFile() && ! outputFile.deleteFile())
+        return false;
+
+    auto* stream = new juce::FileOutputStream (outputFile);
+
+    if (! stream->openedOk())
+    {
+        delete stream;
+        return false;
+    }
+
+    juce::StringPairArray metadata;
+    const int detectedMidi = getDetectedDonkRootMidiNote();
+    const int assignedPitchClass = getAssignedDonkRootPitchClass();
+
+    if (assignedPitchClass >= 0)
+    {
+        int baseMidi = (detectedMidi >= 0 ? detectedMidi : 60)
+            + getOctaveShift() * 12;
+        baseMidi = juce::jlimit (0, 127, baseMidi);
+        int delta = assignedPitchClass - (baseMidi % 12);
+
+        while (delta > 6)
+            delta -= 12;
+
+        while (delta < -6)
+            delta += 12;
+
+        const int exportRootMidi = juce::jlimit (0, 127, baseMidi + delta);
+        metadata.set (juce::WavAudioFormat::acidOneShot, "1");
+        metadata.set (juce::WavAudioFormat::acidRootSet, "1");
+        metadata.set (juce::WavAudioFormat::acidRootNote, juce::String (exportRootMidi));
+    }
+
+    // kapa bara den döda svansen, reverb får leva tills den faktiskt blivit tyst
+    int samplesToWrite = buffer.getNumSamples();
+
+    if (samplesToWrite > 0 && buffer.getNumChannels() > 0)
+    {
+        float peak = 0.0f;
+
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            peak = juce::jmax (peak, buffer.getMagnitude (channel, 0, samplesToWrite));
+
+        if (peak > 1.0e-7f)
+        {
+            // typ -60 dB från peak. nog lågt för reverb men slipper exportera luft i flera sekunder
+            const float silenceThreshold = juce::jmax (1.0e-6f, peak * 0.001f);
+            const int blockSize = juce::jmax (16, static_cast<int> (sampleRate * 0.008));
+            int lastAudibleSample = 0;
+
+            for (int blockStart = 0; blockStart < samplesToWrite; blockStart += blockSize)
+            {
+                const int blockLength = juce::jmin (blockSize, samplesToWrite - blockStart);
+                double sumSquares = 0.0;
+                int valueCount = 0;
+
+                for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+                {
+                    const auto* samples = buffer.getReadPointer (channel, blockStart);
+
+                    for (int i = 0; i < blockLength; ++i)
+                    {
+                        const double value = static_cast<double> (samples[i]);
+                        sumSquares += value * value;
+                        ++valueCount;
+                    }
+                }
+
+                const float rms = valueCount > 0
+                    ? static_cast<float> (std::sqrt (sumSquares / static_cast<double> (valueCount)))
+                    : 0.0f;
+
+                if (rms >= silenceThreshold)
+                    lastAudibleSample = blockStart + blockLength;
+            }
+
+            // lite marginal så sista donken/reverbet inte kapas mitt i svansen
+            const int safetySamples = static_cast<int> (sampleRate * 0.025);
+            samplesToWrite = juce::jlimit (
+                1,
+                buffer.getNumSamples(),
+                lastAudibleSample + safetySamples);
+
+            // pytteliten fade bara för att slippa klick om trimningen hamnar dumt
+            const int fadeSamples = juce::jmin (
+                samplesToWrite,
+                juce::jmax (1, static_cast<int> (sampleRate * 0.006)));
+            const int fadeStart = samplesToWrite - fadeSamples;
+
+            for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+                buffer.applyGainRamp (channel, fadeStart, fadeSamples, 1.0f, 0.0f);
+        }
+    }
+
+    juce::WavAudioFormat wavFormat;
+    std::unique_ptr<juce::AudioFormatWriter> writer (
+        wavFormat.createWriterFor (
+            stream,
+            sampleRate,
+            static_cast<unsigned int> (buffer.getNumChannels()),
+            24,
+            metadata,
+            0));
+
+    if (writer == nullptr)
+    {
+        delete stream;
+        return false;
+    }
+
+    return writer->writeFromAudioSampleBuffer (
+        buffer,
+        0,
+        samplesToWrite);
 }
 
 NewProjectAudioProcessor::FaceMode
@@ -2654,6 +3148,27 @@ bool NewProjectAudioProcessor::readDonkFile (const juce::File& file, Preset& pre
                     getAdvancedParameterDefault (i)));
     }
 
+    // gamla .donk filer saknar dom här o får -1, inget gammalt ljud ändras
+    preset.detectedRootMidiNote = xml->getIntAttribute (
+        "detectedRootMidiNote",
+        -1);
+
+    if (preset.detectedRootMidiNote < 0 || preset.detectedRootMidiNote > 127)
+        preset.detectedRootMidiNote = -1;
+
+    preset.assignedRootPitchClass = xml->getIntAttribute (
+        "assignedRootPitchClass",
+        -1);
+
+    if (preset.assignedRootPitchClass < 0 || preset.assignedRootPitchClass > 11)
+        preset.assignedRootPitchClass = -1;
+
+    // gamla presets har inte octaveShift så dom blir exakt gamla 0
+    preset.octaveShift = juce::jlimit (
+        -2,
+        2,
+        xml->getIntAttribute ("octaveShift", 0));
+
     return true;
 }
 
@@ -2753,6 +3268,14 @@ bool NewProjectAudioProcessor::writeDonkFile (const juce::File& file, const Pres
             preset.advancedValues[i]);
     }
 
+    if (preset.detectedRootMidiNote >= 0)
+        xml->setAttribute ("detectedRootMidiNote", preset.detectedRootMidiNote);
+
+    if (preset.assignedRootPitchClass >= 0)
+        xml->setAttribute ("assignedRootPitchClass", preset.assignedRootPitchClass);
+
+    xml->setAttribute ("octaveShift", preset.octaveShift);
+
     return xml->writeTo (file);
 }
 
@@ -2833,6 +3356,17 @@ void NewProjectAudioProcessor::loadPreset (int index)
     for (int i = 0; i < AdvancedParameterCount; ++i)
         setAdvancedParameterValue (i, preset.advancedValues[i]);
 
+    // gamla presets får C + octave 0 så dom låter exakt som innan root grejen fanns
+    detectedDonkRootMidiNote.store (preset.detectedRootMidiNote);
+    assignedDonkRootPitchClass.store (preset.assignedRootPitchClass);
+
+    if (preset.assignedRootPitchClass >= 0)
+        setRootNote (60 + preset.assignedRootPitchClass);
+    else
+        setRootNote (rootNoteNeutral);
+
+    setOctaveShift (preset.octaveShift);
+
     currentPreset = index;
 }
 
@@ -2908,6 +3442,9 @@ void NewProjectAudioProcessor::saveCurrentAsPreset (
     newPreset.volume = getVolume();
     newPreset.experimentalControl = getExperimentalControlEnabled();
     newPreset.experimentalRandom = getExperimentalRandomEnabled();
+    newPreset.detectedRootMidiNote = getDetectedDonkRootMidiNote();
+    newPreset.assignedRootPitchClass = getAssignedDonkRootPitchClass();
+    newPreset.octaveShift = getOctaveShift();
 
     for (int i = 0; i < AdvancedParameterCount; ++i)
         newPreset.advancedValues[i] = getAdvancedParameterValue (i);
@@ -3084,6 +3621,18 @@ void NewProjectAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         getRootNote());
 
     xml->setAttribute (
+        "detectedDonkRootMidiNote",
+        getDetectedDonkRootMidiNote());
+
+    xml->setAttribute (
+        "assignedDonkRootPitchClass",
+        getAssignedDonkRootPitchClass());
+
+    xml->setAttribute (
+        "octaveShift",
+        getOctaveShift());
+
+    xml->setAttribute (
         "experimentalControl",
         getExperimentalControlEnabled());
 
@@ -3256,6 +3805,23 @@ void NewProjectAudioProcessor::setStateInformation (const void* data, int sizeIn
         xml->getIntAttribute (
             "rootNote",
             rootNoteNeutral));
+
+    detectedDonkRootMidiNote.store (
+        juce::jlimit (
+            -1,
+            127,
+            xml->getIntAttribute ("detectedDonkRootMidiNote", -1)));
+
+    assignedDonkRootPitchClass.store (
+        juce::jlimit (
+            -1,
+            11,
+            xml->getIntAttribute ("assignedDonkRootPitchClass", -1)));
+
+    setOctaveShift (
+        xml->getIntAttribute (
+            "octaveShift",
+            0));
 
     setExperimentalControlEnabled (
         xml->getBoolAttribute (
