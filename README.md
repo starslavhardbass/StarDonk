@@ -2,13 +2,13 @@
 
 Free Windows VST3 hardbass / donk synthesizer made by StarSlav.
 
+[![Download StarDonk](https://img.shields.io/badge/Download-StarDonk-yellow?style=for-the-badge)](https://github.com/starslavhardbass/StarDonk/releases/download/v1.0.0/StarDonk-v1.0.0-Windows-x64-VST3.zip)
+
+**Windows 64-bit VST3**
+
+[View release page](https://github.com/starslavhardbass/StarDonk/releases/tag/v1.0.0)
+
 ![StarDonk](docs/stardonk-default.png)
-
-## Download
-
-**[Download the latest StarDonk release](https://github.com/starslavhardbass/StarDonk/releases/latest)**
-
-Windows 64-bit VST3.
 
 ## Demo
 
@@ -53,6 +53,8 @@ Advanced controls can also be used together with Minimalistic Mode.
 
 StarDonk supports `.donk` presets and preset folders.
 
+You can create your own folders inside the preset directory and sort your donks however you want.
+
 ## Requirements
 
 - Windows 64-bit
@@ -60,7 +62,11 @@ StarDonk supports `.donk` presets and preset folders.
 
 ## Installation
 
-Place `StarDonk.vst3` in:
+Place:
+
+`StarDonk.vst3`
+
+in:
 
 `C:\Program Files\Common Files\VST3`
 
@@ -68,15 +74,22 @@ Place presets in:
 
 `Documents\StarDonk\Presets`
 
-You can create folders inside the preset directory and sort your donks however you want.
+Then restart or rescan plugins in your DAW.
 
 ## Building from source
 
 StarDonk is written in C++ using JUCE.
 
-You will need JUCE and Visual Studio.
+You will need:
 
-Open `StarDonk.jucer`, generate the Visual Studio project, and build the VST3 target using:
+- JUCE
+- Visual Studio
+
+Open:
+
+`StarDonk.jucer`
+
+Generate/open the Visual Studio project and build the VST3 target using:
 
 `Release x64`
 
