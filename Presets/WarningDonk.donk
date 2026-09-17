@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<STAR_DONK name="WarningDonk" pitchDrop="-11.0" decay="2.460000038146973"
+           knock="3.0" ratio="12.0" shape="0.07999999821186066" tone="0.3100000023841858"
+           body="1.090000033378601" drive="10.3100004196167" bassline="1"
+           reverbEnabled="1" reverbMix="0.02999999932944775" volume="0.2000000029802322"
+           experimentalControl="1" experimentalRandom="0"/>

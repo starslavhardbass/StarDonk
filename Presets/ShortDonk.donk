@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<STAR_DONK name="ShortDonk" pitchDrop="12.0" decay="0.1849467754364014"
+           knock="1.973873496055603" ratio="4.0" shape="0.2500277757644653"
+           tone="0.6938422918319702" body="0.123261459171772" drive="1.540027260780334"
+           bassline="0" reverbEnabled="1" reverbMix="0.01999999955296516"
+           volume="1.0"/>

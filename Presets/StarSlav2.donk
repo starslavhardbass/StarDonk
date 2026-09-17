@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<STAR_DONK name="StarSlav2" pitchDrop="0.0" decay="0.1599999964237213" knock="6.0"
+           ratio="4.0" shape="0.0" tone="0.5" body="0.0" drive="4.5" bassline="0"
+           reverbEnabled="1" reverbMix="0.07999999821186066" volume="1.0"/>

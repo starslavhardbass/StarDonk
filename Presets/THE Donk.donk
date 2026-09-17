@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<STAR_DONK name="THE Donk" pitchDrop="5.55999755859375" decay="0.1240000054240227"
+           knock="3.59999942779541" ratio="4.0" shape="0.01999998092651367"
+           tone="0.8480000495910645" body="0.01700001955032349" drive="1.630000114440918"
+           bassline="0" reverbEnabled="0" reverbMix="0.0" declickerEnabled="1"
+           volume="1.0" experimentalControl="0" experimentalRandom="0"/>

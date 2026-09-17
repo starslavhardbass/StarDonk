@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<STAR_DONK name="Nice donk" pitchDrop="0.0" decay="0.2787245213985443" knock="1.742406487464905"
+           ratio="4.0" shape="0.1366308480501175" tone="0.7059329748153687"
+           body="0.06893405318260193" drive="2.668599605560303" bassline="0"
+           reverbEnabled="1" reverbMix="0.01999999955296516" volume="1.0"/>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<STAR_DONK name="Metalic Donk" pitchDrop="10.88882160186768" decay="0.9900000095367432"
+           knock="2.972161769866943" ratio="4.0" shape="0.3870425522327423"
+           tone="0.3459233045578003" body="0.05632982775568962" drive="3.090213537216187"
+           bassline="0" reverbEnabled="1" reverbMix="0.01999999955296516"
+           volume="1.0"/>

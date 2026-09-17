@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<STAR_DONK name="DonkyDonk" pitchDrop="2.36595344543457" decay="0.1736733913421631"
+           knock="3.505858898162842" ratio="4.0" shape="0.1120400428771973"
+           tone="0.7322797179222107" body="0.01513060554862022" drive="3.535112619400024"
+           bassline="0" reverbEnabled="1" reverbMix="0.01999999955296516"
+           volume="1.0" experimentalControl="0" experimentalRandom="0"/>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<STAR_DONK name="ZappDonk" pitchDrop="4.309393882751465" decay="0.1845309734344482"
+           knock="4.573156356811523" ratio="4.0" shape="0.0301203764975071"
+           tone="0.8300591111183167" body="0.01750369556248188" drive="2.063261032104492"
+           bassline="0" reverbEnabled="1" reverbMix="0.01999999955296516"
+           volume="1.0"/>
