@@ -14,7 +14,7 @@ Free Windows VST3 hardbass / donk synthesizer made by StarSlav.
 
 ## Demo
 
-[Watch StarDonk Demo on YouTube](https://www.youtube.com/watch?v=qcPkwo0MUIg)
+[![Watch StarDonk Demo](https://img.youtube.com/vi/qcPkwo0MUIg/hqdefault.jpg)](https://www.youtube.com/watch?v=qcPkwo0MUIg)
 
 ## What's new in v1.0.1
 
