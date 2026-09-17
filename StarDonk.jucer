@@ -3,7 +3,8 @@
 <JUCERPROJECT id="kVBTrI" name="StarDonk" projectType="audioplug" useAppConfig="0"
               addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" pluginCharacteristicsValue="pluginIsSynth,pluginWantsMidiIn"
               pluginFormats="buildVST3" pluginName="StarDonk" pluginManufacturer="StarSlav"
-              aaxIdentifier="com.starslav.StarDonk" bundleIdentifier="com.starslav.StarDonk">
+              aaxIdentifier="com.starslav.StarDonk" bundleIdentifier="com.starslav.StarDonk"
+              version="1.0.1" companyName="Starslav" companyCopyright="Starslav">
   <MAINGROUP id="einhXw" name="StarDonk">
     <GROUP id="{FE1722B8-D4A0-BA01-D31C-2C14110185C8}" name="Source">
       <FILE id="MhIY63" name="PluginProcessor.cpp" compile="1" resource="0"
