@@ -4,6 +4,16 @@ Free Windows VST3 hardbass / donk synthesizer made by StarSlav.
 
 ![StarDonk](docs/stardonk-default.png)
 
+## Download
+
+**[Download the latest StarDonk release](https://github.com/starslavhardbass/StarDonk/releases/latest)**
+
+Windows 64-bit VST3.
+
+## Demo
+
+[Watch StarDonk in action on YouTube](YOUR_YOUTUBE_VIDEO_URL)
+
 ## Features
 
 - Classic donk / hardbass sound
@@ -43,9 +53,10 @@ Advanced controls can also be used together with Minimalistic Mode.
 
 StarDonk supports `.donk` presets and preset folders.
 
-## Download
+## Requirements
 
-Get the latest compiled version from the **Releases** section.
+- Windows 64-bit
+- VST3-compatible DAW
 
 ## Installation
 
@@ -57,11 +68,15 @@ Place presets in:
 
 `Documents\StarDonk\Presets`
 
+You can create folders inside the preset directory and sort your donks however you want.
+
 ## Building from source
 
 StarDonk is written in C++ using JUCE.
 
-Open `StarDonk.jucer`, generate the Visual Studio project, and build:
+You will need JUCE and Visual Studio.
+
+Open `StarDonk.jucer`, generate the Visual Studio project, and build the VST3 target using:
 
 `Release x64`
 
@@ -73,7 +88,7 @@ Selling StarDonk or modified versions is not permitted.
 
 Credit to StarSlav is appreciated, but not required.
 
-See `LICENSE` for full terms.
+See `LICENSE` for the full terms.
 
 ## StarSlav
 
